@@ -1,0 +1,151 @@
+/* stylelint-disable no-descending-specificity, selector-class-pattern */
+
+.columns-story-wrapper {
+  box-sizing: border-box;
+}
+
+.columns-story-wrapper .columns-story {
+  box-sizing: border-box;
+}
+
+.columns-story-wrapper .columns-story .columns-story-row {
+  box-sizing: border-box;
+}
+
+.columns-story > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.columns-story img {
+  width: 100%;
+}
+
+.columns-story > div > div {
+  order: 1;
+}
+
+.columns-story > div > .columns-story-img-col {
+  order: 0;
+}
+
+.columns-story > div > .columns-story-img-col img {
+  display: block;
+  width: 100%;
+
+  /* Source uses a large square-ish asset that fills its column. Force a
+     tall aspect and cover-crop so wide source renditions don't letterbox
+     into a short strip. */
+  aspect-ratio: 1 / 1;
+  height: auto;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Source rhythm: generous vertical margins around each story (AGCO text-and-asset) */
+.columns-story {
+  margin-top: 4.125rem;
+  margin-bottom: 4.125rem;
+}
+
+.columns-story .columns-story-video-col {
+  order: 0;
+}
+
+.columns-story video {
+  display: block;
+  width: 100%;
+}
+
+
+@media (width >= 900px) {
+  .columns-story {
+    margin-top: 6.0625rem;
+    margin-bottom: 6.0625rem;
+  }
+
+  .columns-story > div {
+    align-items: center;
+    flex-direction: unset;
+
+    /* Source uses a wide inter-column gutter (text-and-asset 8.55%) */
+    gap: 8.55%;
+  }
+
+  /* Source text-and-asset proportions: text column ~56%, image column ~35%
+     (the remainder is the 8.55% inter-column gutter). The image is the
+     smaller column, but it renders as a large square asset. */
+  .columns-story > div > div {
+    flex: 1 1 auto;
+    order: unset;
+  }
+
+  .columns-story > div > .columns-story-img-col {
+    flex: 0 0 35%;
+    align-self: center;
+  }
+
+  /* Feature stories (PTx Trimble, Clean Energy Lab, Reman, Safest Year) give
+     the image the LARGER column (~54%) with narrower text (~38%), matching the
+     source text-and-asset--size-medium-standard layout. */
+  .columns-story--feature > div > div {
+    flex: 0 1 38%;
+  }
+
+  .columns-story--feature > div > .columns-story-img-col {
+    flex: 0 0 54%;
+  }
+
+  /* Alternate stories place the image on the LEFT (Clean Energy Lab, Safest
+     Year), matching the source's alternating layout. */
+  .columns-story--image-left > div {
+    flex-direction: row-reverse;
+  }
+}
+
+@media (width >= 1200px) {
+  .columns-story {
+    margin-top: 8rem;
+    margin-bottom: 8rem;
+  }
+}
+
+
+
+
+/* Responsive Styles */
+@media (width < 1024px) {
+  .columns-story-container .columns-story-wrapper {
+    padding: 0 5%;
+  }
+
+  .columns-story-container .columns-story-wrapper .columns-story {
+    display: block;
+  }
+
+  .columns-story-container .columns-story-wrapper .columns-story .columns-story-row {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    margin: 20px 0;
+  }
+
+  .columns-story-container .columns-story-wrapper .columns-story .columns-story-row h1,
+  .columns-story-container .columns-story-wrapper .columns-story .columns-story-row h2,
+  .columns-story-container .columns-story-wrapper .columns-story .columns-story-row h3,
+  .columns-story-container .columns-story-wrapper .columns-story .columns-story-row h4,
+  .columns-story-container .columns-story-wrapper .columns-story .columns-story-row h5,
+  .columns-story-container .columns-story-wrapper .columns-story .columns-story-row h6 {
+    margin: 0;
+    padding: 0;
+    font-size: 20px;
+  }
+
+}
+
+@media (width < 768px) {
+  .columns-story-container .columns-story-wrapper {
+    padding: 0 4%;
+  }
+
+}

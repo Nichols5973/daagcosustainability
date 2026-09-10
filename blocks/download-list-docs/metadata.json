@@ -1,0 +1,11 @@
+{
+  "variantName": "download-list-docs",
+  "baseBlock": "download-list",
+  "version": "1.0.0",
+  "created": "2026-09-08T00:00:00.000Z",
+  "sourceContext": { "originUrl": "https://www.agcocorp.com/us/en/home/sustainability.html", "originPage": "AGCO Sustainability landing page", "blockPosition": "middle" },
+  "visualCharacteristics": { "colorScheme": "themed", "density": "compact", "purpose": "downloads", "imagePattern": "icon" },
+  "contentPattern": { "structure": "list/row of downloadable document links (PDF/XLSX) with file icon and download button", "buttonCount": 0, "imageCount": 0 },
+  "reuseGuidance": { "suitableFor": ["sections listing downloadable reports/documents from a DAM folder or picked assets"], "notSuitableFor": ["image galleries", "text-and-image layouts"] },
+  "usage": { "pagesUsing": ["/us/en/home/sustainability"], "reuseCount": 1, "lastUsed": "2026-09-08T00:00:00.000Z" }
+}

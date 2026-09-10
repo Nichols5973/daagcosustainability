@@ -1,0 +1,11 @@
+{
+  "variantName": "carousel-ratings",
+  "baseBlock": "carousel",
+  "version": "1.0.0",
+  "created": "2026-09-08T00:00:00.000Z",
+  "sourceContext": { "originUrl": "https://www.agcocorp.com/us/en/home/sustainability.html", "originPage": "AGCO Sustainability landing page", "blockPosition": "middle" },
+  "visualCharacteristics": { "colorScheme": "light", "density": "wide", "purpose": "ratings", "imagePattern": "large" },
+  "contentPattern": { "structure": "horizontal slider of rating cards, each with a logo image and rating value/scale text", "buttonCount": 0, "imageCount": 1 },
+  "reuseGuidance": { "suitableFor": ["sliders of rating/award cards or similar repeating image+text cards"], "notSuitableFor": ["static grids without a slider", "full-bleed heroes"] },
+  "usage": { "pagesUsing": ["/us/en/home/sustainability"], "reuseCount": 1, "lastUsed": "2026-09-08T00:00:00.000Z" }
+}

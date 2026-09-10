@@ -9,28 +9,33 @@
     "id": "section",
     "components": [
       "accordion",
+      "action-button",
+      "button",
       "button",
       "cards",
       "carousel",
       "columns",
-      "embed",
-      "fragment",
+      "contentfragment",
+      "download-list",
+      "dm-asset",
+      "dm-template",
+      "embed-adaptive-form",
+      "find-a-doctor",
+      "forex",
       "form",
+      "fragment",
       "hero",
       "image",
+      "promotion",
       "quote",
       "search",
+      "separator",
       "tabs",
-      "table",
+      "teaser",
       "text",
       "title",
+      "title-block",
       "video"
-    ]
-  },
-  {
-    "id": "accordion",
-    "components": [
-      "accordion-item"
     ]
   },
   {
@@ -40,9 +45,15 @@
     ]
   },
   {
-    "id": "carousel",
+    "id": "cards-framework",
     "components": [
-      "carousel-item"
+      "card"
+    ]
+  },
+  {
+    "id": "carousel-ratings",
+    "components": [
+      "card"
     ]
   },
   {
@@ -54,44 +65,14 @@
   {
     "id": "column",
     "components": [
-      "text",
-      "image",
       "button",
-      "title"
+      "dm-asset",
+      "dm-template",
+      "image",
+      "text",
+      "title",
+      "title-block",
+      "video"
     ]
-  },
-  {
-    "id": "table",
-    "components": [
-      "table-row"
-    ]
-  },
-  {
-    "id": "table-2-columns",
-    "components": [
-      "table-col-2"
-    ]
-  },
-  {
-    "id": "table-3-columns",
-    "components": [
-      "table-col-3"
-    ]
-  },
-  {
-    "id": "table-4-columns",
-    "components": [
-      "table-col-4"
-    ]
-  },
-  {
-    "id": "tabs",
-    "components": [
-      "tabs-item"
-    ]
-  },
-  {
-    "id": "video",
-    "components": []
   }
 ]

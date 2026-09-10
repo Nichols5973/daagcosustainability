@@ -1,0 +1,42 @@
+/*
+ * Brand design tokens extracted from the AGCO source site
+ * (https://www.agcocorp.com) clientlib CSS + Typekit kit hlh4pjd.
+ *
+ * styles.css reads brand values via the var(--brand-*, fallback) pattern,
+ * so defining the --brand-* source variables here overrides the defaults
+ * without editing every consumer.
+ */
+:root {
+  /* Source vars consumed by styles.css var(--brand-*, ...) fallbacks */
+  --brand-background-color: #fff;
+  --brand-text-color: #000;
+  --brand-light-text-color: #fff;
+  --brand-link-color: #024051;
+  --brand-link-hover-color: #674719;
+  --brand-theme-color: #f89300;
+  --brand-dark-color: #1e303a;
+  --brand-light-color: #ddd6c0;
+
+  /* Fonts: body = Barlow (Typekit), headings = Noto Serif (Google), weight 400 */
+  --brand-body-font-family: barlow, sans-serif;
+  --brand-heading-font-family: 'Noto Serif', serif;
+  --brand-heading-font-weight: 400;
+
+  /* Brand accents (direct-use tokens for block CSS) */
+  --brand-primary: #024051;
+  --brand-accent: #f89300;
+  --brand-accent-hover: #674719;
+
+  /* Themed section colors */
+  --blue-theme-bg: #024051;
+  --blue-theme-text: #fff;
+  --blue-theme-accent: #fff;
+  --tan-theme-bg: #ddd6c0;
+  --tan-theme-text: #000;
+  --tan-theme-accent: #1e303a;
+  --tan-theme-accent-hover: #f89300;
+
+  /* Layout */
+  --content-max-width: 1440px;
+  --container-max-width: 1664px;
+}

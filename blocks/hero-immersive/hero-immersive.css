@@ -1,0 +1,727 @@
+/* stylelint-disable no-descending-specificity, selector-class-pattern */
+
+/* --------------------------
+   Base Hero Layout
+--------------------------- */
+.hero-immersive-container .hero-immersive-wrapper {
+  max-width: unset;
+  padding: 0;
+}
+
+.hero-immersive {
+  position: relative;
+
+  /* Source immersive-lead: tall full-bleed lead with generous top/bottom pad */
+  padding: 8rem 24px 5.625rem;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+
+  /* Dark fallback only — shown while the background photo loads. The
+     <picture> layer (z-index 0) paints over this, so it must NOT sit above
+     the image (a negative-z picture would hide behind this background). */
+  background-color: #1b1b1b;
+}
+
+/* Ensure all direct child divs stay within the hero bounds and sit ABOVE the
+   background photo. */
+.hero-immersive > div {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Scrim for text legibility over the photo (source hero image is fairly dark
+   already; a light gradient keeps the white text readable). */
+.hero-immersive::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(180deg, rgb(0 0 0 / 15%) 0%, rgb(0 0 0 / 45%) 100%);
+  pointer-events: none;
+}
+
+/* --------------------------
+   Headings & Paragraphs
+--------------------------- */
+.hero-immersive h1,
+.hero-immersive h2,
+.hero-immersive h3,
+.hero-immersive h4,
+.hero-immersive h5,
+.hero-immersive h6,
+.hero-immersive p {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  color: var(--text-light);
+  text-align: center;
+  font-family: var(--black-font-family);
+}
+
+/* Source immersive-lead title is Noto Serif; scaled to read comfortably over
+   the background photo (smaller than the source's very large 120px). */
+.hero-immersive h1 {
+  font-family: var(--heading-font-family, 'Noto Serif', serif);
+  font-size: clamp(2.25rem, 5vw, 4.5rem);
+  line-height: 1.05;
+  font-weight: 500;
+  text-wrap: balance;
+}
+
+.hero-immersive .hero-immersive-text p,
+.hero-immersive > div p {
+  font-family: var(--body-font-family, barlow, sans-serif);
+  font-size: 1.3125rem;
+  line-height: 2rem;
+  font-weight: 600;
+  max-width: 60ch;
+  text-wrap: pretty;
+}
+
+/* Special underline (only for h1 by default) */
+.hero-immersive h1::after {
+  background-color: var(--main-accent-color);
+  content: "";
+  display: block;
+  height: 5px;
+  margin: 20px auto 30px;
+  width: 128px;
+  transition: width .4s ease-in-out;
+}
+
+/* Source hero title has no underline bar — suppress it for overlay layout. */
+.hero-immersive.block.overlay h1::after {
+  display: none;
+}
+
+/* Left-aligned layouts: the title underline hugs the left like the title. */
+.hero-immersive.image-left h1::after,
+.hero-immersive.image-right h1::after,
+.hero-immersive.image-background-text-left h1::after,
+.hero-immersive.image-background-text-right h1::after {
+  margin-left: 0;
+}
+
+/* Remove underline when class applied */
+.hero-immersive.removeunderline h1::after,
+.hero-immersive.removeunderline h2::after,
+.hero-immersive.removeunderline h3::after,
+.hero-immersive.removeunderline h4::after,
+.hero-immersive.removeunderline h5::after,
+.hero-immersive.removeunderline h6::after {
+  display: none;
+}
+
+/* --------------------------
+   Hero Background Image
+--------------------------- */
+
+/* Background image layer (direct child of the block, added by the JS for
+   overlay layouts) — fills the whole hero behind the scrim and content. */
+.hero-immersive .hero-immersive-bg,
+.hero-immersive > picture {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  margin: 0;
+}
+
+.hero-immersive .hero-immersive-bg picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-immersive img {
+  object-fit: cover;
+  object-position: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* --------------------------
+   Hero Background Video
+--------------------------- */
+video.hero-immersive-video-bg {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* For side-by-side layouts the video sits in-flow */
+.hero-immersive.image-left video.hero-immersive-video-bg,
+.hero-immersive.image-right video.hero-immersive-video-bg,
+.hero-immersive.image-top video.hero-immersive-video-bg,
+.hero-immersive.image-bottom video.hero-immersive-video-bg {
+  position: relative;
+  inset: auto;
+  min-height: 400px;
+}
+
+/* Ensure the asset slot div sizes correctly when holding video */
+.hero-immersive.hero-immersive-video.image-left > div:first-child,
+.hero-immersive.hero-immersive-video.image-right > div:first-child {
+  flex: 0 0 50%;
+  overflow: hidden;
+}
+
+.hero-immersive.hero-immersive-video.image-top > div:first-child,
+.hero-immersive.hero-immersive-video.image-bottom > div:first-child {
+  width: 100%;
+  height: 400px;
+  overflow: hidden;
+}
+
+/* --------------------------
+   Buttons
+--------------------------- */
+
+
+/* Primary CTA */
+.hero-immersive-wrapper .button-container.cta-button a.button {
+  background-color: var(--main-accent-color);
+  border: 2px solid var(--main-accent-color);
+}
+
+.hero-immersive-wrapper .button-container.cta-button a.button::after {
+  content: "\f105";
+  font-family: 'Font Awesome 5 Solid', sans-serif;
+  font-size: 20px;
+  margin-left: 8px;
+  transition: all 0.3s ease;
+  color: var(--text-light);
+}
+
+.hero-immersive-wrapper .button-container.cta-button a.button:hover {
+  background-color: rgb(255 255 255 / 10%) !important;
+  color: var(--text-light) !important;
+  border-color: var(--text-light) !important;
+  box-shadow: 0 4px 8px rgb(0 0 0 / 30%) !important;
+  transform: translateY(-1px);
+}
+
+.hero-immersive-wrapper .button-container.cta-button a.button:hover::after {
+  color: var(--text-light) !important;
+  transform: translateX(2px);
+}
+
+/* Secondary CTA */
+.hero-immersive-wrapper .button-container.cta-button-secondary a.button {
+  background: transparent;
+  border: 2px solid var(--main-accent-color);
+  color: var(--text-light);
+}
+
+.hero-immersive-wrapper .button-container.cta-button-secondary a.button::after {
+  content: "\f105";
+  font-family: 'Font Awesome 5 Solid', sans-serif;
+  font-size: 20px;
+  margin-left: 8px;
+  transition: all 0.3s ease;
+  color: var(--text-light);
+}
+
+.hero-immersive-wrapper .button-container.cta-button-secondary a.button:hover {
+  background-color: var(--main-accent-color);
+  color: var(--text-light);
+}
+
+.hero-immersive-wrapper .button-container.cta-button-secondary a.button:hover::after {
+  color: var(--text-dark);
+  transform: translateX(2px);
+}
+
+/* Accessibility */
+.hero-immersive-wrapper .button-container a.button:focus {
+  outline: 2px solid var(--main-accent-color);
+  outline-offset: 2px;
+}
+
+/* Minimal variation */
+.hero-immersive .button-container.cta-minimal a.button::after {
+  margin-left: 4px;
+}
+
+/* --------------------------
+   Layout Variations
+--------------------------- */
+.hero-immersive.image-left,
+.hero-immersive.image-right,
+.hero-immersive.image-top,
+.hero-immersive.image-bottom {
+  gap: 40px;
+  padding: 0;
+  min-height: auto;
+  box-shadow: 0 4px 20px rgb(0 0 0 / 15%);
+  overflow: hidden;
+}
+
+
+.hero-immersive.image-left {
+  flex-direction: row;
+  justify-content: flex-start;
+}
+
+.hero-immersive.image-right {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+.hero-immersive.image-top {
+  flex-direction: column;
+}
+
+.hero-immersive.image-bottom {
+  flex-direction: column-reverse;
+}
+
+/* Image Background Text Left - Text overlaid on background image, left-aligned */
+.hero-immersive.image-background-text-left {
+  justify-content: flex-start;
+  align-items: center;
+  text-align: left;
+  padding: 60px 40px;
+}
+
+.hero-immersive.image-background-text-left > div {
+  text-align: left;
+  max-width: min(600px, 100%);
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Image Background Text Right - Text overlaid on background image, right-aligned */
+.hero-immersive.image-background-text-right {
+  justify-content: flex-end;
+  align-items: center;
+  text-align: left;
+  padding: 60px 40px;
+}
+
+.hero-immersive.image-background-text-right > div {
+  text-align: left;
+  max-width: min(600px, 100%);
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.hero-immersive.image-left picture,
+.hero-immersive.image-right picture,
+.hero-immersive.image-top picture,
+.hero-immersive.image-bottom picture {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-immersive.image-left > div:first-child picture,
+.hero-immersive.image-right > div:first-child picture {
+  height: 100%;
+  width: 100%;
+}
+
+.hero-immersive.image-top picture,
+.hero-immersive.image-bottom picture {
+  width: 100%;
+  height: 400px;
+}
+
+/* Text align adjustments */
+.hero-immersive.image-left > div:first-child,
+.hero-immersive.image-right > div:first-child {
+  flex: 0 0 50%;
+}
+
+.hero-immersive.image-left > div:nth-child(2),
+.hero-immersive.image-right > div:nth-child(2) {
+  flex: 0 0 50%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 40px;
+  box-sizing: border-box;
+}
+
+.hero-immersive.image-right > div:nth-child(2) {
+  padding-left: 80px;
+}
+
+picture {
+    line-height: 0;
+}
+
+.hero-immersive.image-left h2,
+.hero-immersive.image-left h3,
+.hero-immersive.image-left h4,
+.hero-immersive.image-left h5,
+.hero-immersive.image-left h6,
+.hero-immersive.image-left p,
+.hero-immersive.image-right h2,
+.hero-immersive.image-right h3,
+.hero-immersive.image-right h4,
+.hero-immersive.image-right h5,
+.hero-immersive.image-right h6,
+.hero-immersive.image-right p {
+  text-align: left;
+  margin: 0;
+  width: 100%;
+  max-width: none;
+  color: var(--text-color);
+    text-shadow: unset;
+}
+
+.hero-immersive.image-left h1,.hero-immersive.image-right h1{
+  color: var(--text-color);
+  text-shadow: unset;
+  text-align: left;
+  margin: 0;
+  width: 100%;
+  max-width: none;
+}
+
+.hero-immersive.image-background-text-left h1,
+.hero-immersive.image-background-text-left h2,
+.hero-immersive.image-background-text-left h3,
+.hero-immersive.image-background-text-left h4,
+.hero-immersive.image-background-text-left h5,
+.hero-immersive.image-background-text-left h6,
+.hero-immersive.image-background-text-left p {
+  text-align: left;
+  margin: 0 0 20px;
+  width: 100%;
+  max-width: none;
+  color: var(--text-light);
+}
+
+.hero-immersive.image-background-text-left .button-container {
+  text-align: left;
+  margin-top: 30px;
+}
+
+.hero-immersive.image-background-text-right h1,
+.hero-immersive.image-background-text-right h2,
+.hero-immersive.image-background-text-right h3,
+.hero-immersive.image-background-text-right h4,
+.hero-immersive.image-background-text-right h5,
+.hero-immersive.image-background-text-right h6,
+.hero-immersive.image-background-text-right p {
+  text-align: left;
+  margin: 0 0 20px;
+  width: 100%;
+  max-width: none;
+  color: var(--text-light);
+}
+
+.hero-immersive.image-background-text-right .button-container {
+  text-align: left;
+  margin-top: 30px;
+}
+
+.hero-immersive.image-top h1,
+.hero-immersive.image-top h2,
+.hero-immersive.image-top h3,
+.hero-immersive.image-top h4,
+.hero-immersive.image-top h5,
+.hero-immersive.image-top h6,
+.hero-immersive.image-top p,
+.hero-immersive.image-bottom h1,
+.hero-immersive.image-bottom h2,
+.hero-immersive.image-bottom h3,
+.hero-immersive.image-bottom h4,
+.hero-immersive.image-bottom h5,
+.hero-immersive.image-bottom h6,
+.hero-immersive.image-bottom p{
+  text-align: center;
+  max-width: none;
+  color: var(--text-color);
+    text-shadow: unset;
+}
+
+/* --------------------------
+   Responsive
+--------------------------- */
+@media (width >= 900px) {
+  .hero-immersive { padding: 40px 32px; }
+
+  .hero-immersive-wrapper a.button {
+    padding: 14px 28px;
+    font-size: 18px;
+  }
+}
+
+@media (width < 1024px) {
+  .hero-immersive { min-height: 650px; }
+
+  .hero-immersive.image-background-text-left {
+    padding: 50px 30px;
+  }
+
+  .hero-immersive.image-background-text-right {
+    padding: 50px 30px;
+  }
+
+  .hero-immersive.image-background-text-left > div,
+  .hero-immersive.image-background-text-right > div {
+    max-width: min(600px, calc(100% - 20px));
+  }
+}
+
+@media (width < 768px) {
+  .hero-immersive { min-height: 600px; }
+
+  .hero-immersive.image-left,
+  .hero-immersive.image-right {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .hero-immersive.image-left picture,
+  .hero-immersive.image-right picture {
+    width: 100%;
+    height: 300px;
+    flex: none;
+  }
+
+  .hero-immersive.hero-immersive-video.image-left video.hero-immersive-video-bg,
+  .hero-immersive.hero-immersive-video.image-right video.hero-immersive-video-bg {
+    min-height: 300px;
+    height: 300px;
+  }
+
+  .hero-immersive.image-left > div:last-child,
+  .hero-immersive.image-right > div:last-child {
+    text-align: center;
+  }
+
+  .hero-immersive.image-left h2,
+  .hero-immersive.image-left h3,
+  .hero-immersive.image-left h4,
+  .hero-immersive.image-left h5,
+  .hero-immersive.image-left h6,
+  .hero-immersive.image-left p,
+  .hero-immersive.image-right h2,
+  .hero-immersive.image-right h3,
+  .hero-immersive.image-right h4,
+  .hero-immersive.image-right h5,
+  .hero-immersive.image-right h6,
+  .hero-immersive.image-right p {
+    text-align: center;
+    margin: 0 auto;
+  }
+
+  .hero-immersive.image-top picture,
+  .hero-immersive.image-bottom picture {
+    height: 250px;
+  }
+
+  .hero-immersive.hero-immersive-video.image-top > div:first-child,
+  .hero-immersive.hero-immersive-video.image-bottom > div:first-child {
+    height: 250px;
+  }
+
+  .hero-immersive.hero-immersive-video.image-top video.hero-immersive-video-bg,
+  .hero-immersive.hero-immersive-video.image-bottom video.hero-immersive-video-bg {
+    min-height: 250px;
+  }
+
+  /* Mobile adjustments for image-background-text-left */
+  .hero-immersive.image-background-text-left {
+    padding: 40px 16px;
+    text-align: center;
+  }
+
+  .hero-immersive.image-background-text-left > div {
+    max-width: 100%;
+  }
+
+  .hero-immersive.image-background-text-left h1,
+  .hero-immersive.image-background-text-left h2,
+  .hero-immersive.image-background-text-left h3,
+  .hero-immersive.image-background-text-left h4,
+  .hero-immersive.image-background-text-left h5,
+  .hero-immersive.image-background-text-left h6,
+  .hero-immersive.image-background-text-left p {
+    text-align: center;
+  }
+
+  .hero-immersive.image-background-text-left .button-container {
+    text-align: center;
+  }
+
+  /* Mobile adjustments for image-background-text-right */
+  .hero-immersive.image-background-text-right {
+    padding: 40px 16px;
+    text-align: center;
+  }
+
+  .hero-immersive.image-background-text-right > div {
+    max-width: 100%;
+  }
+
+  .hero-immersive.image-background-text-right h1,
+  .hero-immersive.image-background-text-right h2,
+  .hero-immersive.image-background-text-right h3,
+  .hero-immersive.image-background-text-right h4,
+  .hero-immersive.image-background-text-right h5,
+  .hero-immersive.image-background-text-right h6,
+  .hero-immersive.image-background-text-right p,
+  .hero-immersive.image-background-text-right .button-container {
+    text-align: center;
+  }
+
+  .hero-immersive.image-background-text-right .button-container {
+    text-align: center;
+  }
+
+  /* Default overlay — constrain text on mobile */
+  .hero-immersive.block.overlay .hero-immersive-text {
+    max-width: calc(100% - 32px);
+    padding: 16px;
+  }
+
+  /* Side-by-side layouts — text panel goes full width on mobile */
+  .hero-immersive.image-left > div:nth-child(2),
+  .hero-immersive.image-right > div:nth-child(2) {
+    flex: 1 1 auto;
+    padding: 24px 16px;
+  }
+}
+
+@media (width < 480px) {
+  .hero-immersive {
+    min-height: 400px;
+    padding: 24px 12px;
+  }
+
+  .hero-immersive.image-background-text-left,
+  .hero-immersive.image-background-text-right {
+    padding: 24px 12px;
+  }
+
+  .hero-immersive h1 { font-size: clamp(2.25rem, 9vw, 3rem); }
+  .hero-immersive h2 { font-size: 1.75rem; }
+}
+
+/* --------------------------
+   Background Style Variations
+--------------------------- */
+
+/* Theme Dark Background Style — applies to the text box only, never the asset */
+.hero-immersive.theme-dark .hero-immersive-text {
+  background: var(--dark-color);
+}
+
+.hero-immersive.theme-dark h1,
+.hero-immersive.theme-dark h2,
+.hero-immersive.theme-dark h3,
+.hero-immersive.theme-dark h4,
+.hero-immersive.theme-dark h5,
+.hero-immersive.theme-dark h6,
+.hero-immersive.theme-dark p {
+  color: var(--light-color);
+}
+
+.hero-immersive.theme-dark .button-container a.button {
+  color: var(--light-color);
+  border-color: var(--light-color);
+}
+
+/* Theme Light Background Style — applies to the text box only, never the asset */
+.hero-immersive.theme-light .hero-immersive-text {
+  background: var(--light-color);
+}
+
+.hero-immersive.theme-light h1,
+.hero-immersive.theme-light h2,
+.hero-immersive.theme-light h3,
+.hero-immersive.theme-light h4,
+.hero-immersive.theme-light h5,
+.hero-immersive.theme-light h6,
+.hero-immersive.theme-light p {
+  color: var(--dark-color);
+}
+
+.hero-immersive.theme-light .button-container a.button {
+  color: var(--dark-color);
+  border-color: var(--dark-color);
+}
+
+/* Overlay text box — targets .hero-immersive-text class set by JS, so it is always
+   the correct div regardless of whether a <video> was prepended */
+.hero-immersive.block.overlay .hero-immersive-text,
+.hero-immersive.image-background-text-left .hero-immersive-text,
+.hero-immersive.image-background-text-right .hero-immersive-text {
+  padding: 20px;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+/* Source hero places text directly over the photo (no boxed backdrop). The
+   block-level ::after gradient scrim plus a text-shadow keeps it legible. */
+.hero-immersive.block.overlay:not(.theme-dark, .theme-light) .hero-immersive-text,
+.hero-immersive.image-background-text-left:not(.theme-dark, .theme-light) .hero-immersive-text,
+.hero-immersive.image-background-text-right:not(.theme-dark, .theme-light) .hero-immersive-text {
+  background: none;
+  text-shadow: 0 1px 12px rgb(0 0 0 / 45%);
+}
+
+/* button theme hero specific */
+.hero-immersive.block.overlay .button-container.cta-link a.button,.hero-immersive.image-background-text-left .button-container.cta-link a.button,.hero-immersive.image-background-text-right .button-container.cta-link a.button {
+  color: var(--text-light);
+}
+
+.hero-immersive.block.overlay .button-container.cta-link a.button::after  ,.hero-immersive.image-background-text-left .button-container.cta-link a.button::after,.hero-immersive.image-background-text-right .button-container.cta-link a.button::after  {
+  color: var(--text-light);
+}
+
+/* --------------------------
+   Badge / Highlight pill
+--------------------------- */
+.hero-immersive .hero-immersive__badge {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+
+  /* Centered by default so it matches the centered title in the overlay,
+     asset-top and asset-bottom layouts. Auto side margins center a
+     fit-content block; the left-aligned layouts override this below. */
+  margin: 0 auto 12px;
+  padding: 7px 18px;
+  border-radius: 100px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-light);
+  background: rgb(255 255 255 / 20%);
+  backdrop-filter: blur(4px);
+}
+
+/* Left-aligned layouts: the badge hugs the left edge like the title/text. */
+.hero-immersive.image-left .hero-immersive__badge,
+.hero-immersive.image-right .hero-immersive__badge,
+.hero-immersive.image-background-text-left .hero-immersive__badge,
+.hero-immersive.image-background-text-right .hero-immersive__badge {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Light text-panel layouts (dark title): badge uses dark text + a faint
+   dark chip to stay legible. */
+.hero-immersive.image-left .hero-immersive__badge,
+.hero-immersive.image-right .hero-immersive__badge,
+.hero-immersive.image-top .hero-immersive__badge,
+.hero-immersive.image-bottom .hero-immersive__badge {
+  color: var(--text-color);
+  background: rgb(0 0 0 / 8%);
+}

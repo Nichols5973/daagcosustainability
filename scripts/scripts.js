@@ -1,23 +1,269 @@
 import {
   loadHeader,
   loadFooter,
-  decorateButtons,
+  buildBlock,
+  decorateButtons as libDecorateButtons,
   decorateIcons,
   decorateSections,
   decorateBlocks,
   decorateTemplateAndTheme,
-  getMetadata,
   waitForFirstImage,
   loadSection,
   loadSections,
   loadCSS,
+  fetchPlaceholders,
+  getMetadata,
+  createOptimizedPicture,
 } from './aem.js';
 
+// eslint-disable-next-line import/no-cycle
+import {
+  getLanguage,
+  formatDate,
+  setPageLanguage,
+  PATH_PREFIX,
+  getHostname,
+} from './utils.js';
+
+import {
+  runExperimentation,
+  showExperimentationRail,
+} from './experiment-load.js';
+
+const experimentationConfig = {
+  prodHost: 'www.example.com',
+  audiences: {
+    mobile: () => window.innerWidth < 600,
+    desktop: () => window.innerWidth >= 600,
+    // define your custom audiences here as needed
+  },
+};
+
+// --- BEGIN DM/Scene7 auto-block (excat-generated) ---
+
+const DM_BREAKPOINTS = [
+  { media: '(min-width: 600px)', width: 2000 }, // desktop
+  { width: 750 }, // mobile / fallback (no media)
+];
+
+// ---- Canonical helpers (keep in sync with dm-scene7-helpers.js) ----
+function detectDynamicMediaUrl(urlStr) {
+  // Reject relative URLs up front — without this guard, the auto-block
+  // scans every anchor in <main> and a normal site link like
+  // `<a href="/is/image/foo">` would be classified as DM and replaced by
+  // a <picture>. Keep byte-identical with dm-scene7-helpers.js.
+  if (!/^(https?:\/\/|\/\/)/i.test(urlStr)) return false;
+  let u;
+  try { u = new URL(urlStr, 'https://x/'); } catch { return false; }
+  // Scene7 detected by path alone — hostname is irrelevant because
+  // customer sites routinely CNAME a vanity domain to Scene7 (e.g.
+  // media-assets.brand.example).
+  if (u.pathname.startsWith('/is/image/')) {
+    return 'scene7';
+  }
+  if (/^delivery-p\d+-e\d+\.adobeaemcloud\.com$/.test(u.hostname)
+      && u.pathname.startsWith('/adobe/assets/urn:')) {
+    return 'dm-openapi';
+  }
+  return false;
+}
+
+function buildScene7Rendition(src, { width, format }) {
+  // Manipulate the query string verbatim — URL.searchParams percent-
+  // encodes `$`, but Scene7's IS/Image template-parameter syntax
+  // (`$image=`, `$badge=`, etc.) requires the literal `$`. Encoded
+  // form is silently dropped by Scene7's parser, returning the bare
+  // template image instead of the personalized composite.
+  const normalized = src.startsWith('//') ? `https:${src}` : src;
+  const qIdx = normalized.indexOf('?');
+  const base = qIdx >= 0 ? normalized.slice(0, qIdx) : normalized;
+  const query = qIdx >= 0 ? normalized.slice(qIdx + 1) : '';
+  const pairs = query.split('&').filter((p) => p);
+  const filtered = pairs.filter((p) => {
+    const k = p.split('=')[0];
+    return k !== 'wid' && k !== 'fmt';
+  });
+  filtered.push(`wid=${width}`);
+  filtered.push(`fmt=${format}`);
+  return `${base}?${filtered.join('&')}`;
+}
+
+function buildDmOpenApiRendition(src, { width }) {
+  // Synthetic base — see buildScene7Rendition above.
+  const url = new URL(src, 'https://x/');
+  url.searchParams.set('width', String(width));
+  return url.toString();
+}
+
+function findDmOnAnchor(a) {
+  if (!a || typeof a.getAttribute !== 'function') return null;
+  const href = a.getAttribute('href') || '';
+  if (detectDynamicMediaUrl(href)) return { mode: 'unlinked', dmUrl: href };
+  const title = a.getAttribute('title') || '';
+  if (detectDynamicMediaUrl(title)) return { mode: 'linked', dmUrl: title };
+  return null;
+}
+
+// True when the given anchor is the sole child of a markdown-generated
+// <p> wrapper that should be unwrapped so the picture becomes a top-
+// level grid cell. P only — NEVER DIV: EDS block content uses <div>
+// cells (cards/carousel/columns decorators detect image cells via
+// `div.querySelector('picture')`); unwrapping a <div> collapses the
+// block's row structure and stops images rendering inside blocks.
+// Text-node guard: <p>caption <a href="DM">alt</a></p> must NOT be
+// treated as unwrappable — replacing the parent would delete "caption".
+// Comparing trimmed textContent of <p> against the anchor's catches this.
+function isUnwrappableMarkdownParagraph(anchor) {
+  const parent = anchor && anchor.parentElement;
+  if (!parent || parent.tagName !== 'P') return false;
+  if (parent.children.length !== 1 || parent.firstElementChild !== anchor) return false;
+  return parent.textContent.trim() === anchor.textContent.trim();
+}
+
+// Sentinel used by the transformer when source <img> alt is empty. Document
+// view shows the visible cue; we translate it back to alt="" here so screen
+// readers correctly skip decorative images. If an author edits the link
+// text away from the sentinel, their edit becomes the real alt — a11y
+// improves. Must stay byte-identical to dm-scene7-helpers.js EMPTY_ALT_SENTINEL.
+const EMPTY_ALT_SENTINEL = 'Image without alt text';
+
+function linkTextToAlt(linkText) {
+  return linkText === EMPTY_ALT_SENTINEL ? '' : linkText;
+}
+
+// ---- Rendering ----
+function appendSource(picture, { type, srcset, media }) {
+  const source = document.createElement('source');
+  if (type) source.type = type;
+  source.srcset = srcset;
+  if (media) source.setAttribute('media', media);
+  picture.append(source);
+}
+
+function renderScene7Picture(src, alt) {
+  const picture = document.createElement('picture');
+  DM_BREAKPOINTS.forEach((bp) => appendSource(picture, {
+    type: 'image/webp',
+    srcset: buildScene7Rendition(src, { width: bp.width, format: 'webp' }),
+    media: bp.media,
+  }));
+  DM_BREAKPOINTS.forEach((bp) => appendSource(picture, {
+    type: 'image/jpeg',
+    srcset: buildScene7Rendition(src, { width: bp.width, format: 'jpg' }),
+    media: bp.media,
+  }));
+  const img = document.createElement('img');
+  img.src = buildScene7Rendition(src, { width: 750, format: 'jpg' });
+  img.alt = alt;
+  img.loading = 'lazy';
+  picture.append(img);
+  return picture;
+}
+
+function renderDmOpenApiPicture(src, alt) {
+  const picture = document.createElement('picture');
+  DM_BREAKPOINTS.forEach((bp) => appendSource(picture, {
+    srcset: buildDmOpenApiRendition(src, { width: bp.width }),
+    media: bp.media,
+  }));
+  const img = document.createElement('img');
+  img.src = buildDmOpenApiRendition(src, { width: 750 });
+  img.alt = alt;
+  img.loading = 'lazy';
+  picture.append(img);
+  return picture;
+}
+
+function buildDynamicMediaImages(main) {
+  // Anchors carrying DM URLs from the markdown round-trip. The transformer
+  // turns <img DM> into <a href=DM-URL> (or <a href=/page title=DM-URL>
+  // for the linked case); CommonMark's [text](url "title") syntax
+  // survives docx and the title attribute round-trips back to a real
+  // HTML attribute at render time.
+  main.querySelectorAll('a').forEach((a) => {
+    const match = findDmOnAnchor(a);
+    if (!match) return;
+
+    const { mode, dmUrl } = match;
+    // Translate link text back to alt: sentinel ('Image without alt text')
+    // means the source had alt="" — render with alt="" for a11y. Any other
+    // text (including the author's edit of the placeholder) is real alt.
+    const alt = linkTextToAlt(a.textContent.trim());
+    const picture = detectDynamicMediaUrl(dmUrl) === 'scene7'
+      ? renderScene7Picture(dmUrl, alt)
+      : renderDmOpenApiPicture(dmUrl, alt);
+
+    // decorateMain() calls decorateButtons() BEFORE buildAutoBlocks(). At
+    // that point every DM anchor (linked or unlinked) looks like a plain
+    // text link — no <img> yet — so decorateButtons promotes it to a button
+    // and adds `button-container` to its sole-child <p>/<div> parent. The
+    // unwanted border around the rebuilt <picture> is the visible symptom;
+    // for unlinked-in-<div> the leftover `button-container` on a block-cell
+    // <div> can also confuse block decorators that filter on classList.
+    // Strip both classes BEFORE rebuilding so the cleanup covers every
+    // branch below (replaceChildren / replaceWith / parent-replaceWith).
+    // Idempotent — no-op when the classes aren't present.
+    a.classList.remove('button', 'primary', 'secondary');
+    if (a.classList.length === 0) a.removeAttribute('class');
+    const buttonContainer = a.parentElement;
+    if (
+      buttonContainer
+      && buttonContainer.classList.contains('button-container')
+      && buttonContainer.children.length === 1
+    ) {
+      buttonContainer.classList.remove('button-container');
+      if (buttonContainer.classList.length === 0) buttonContainer.removeAttribute('class');
+    }
+
+    if (mode === 'linked') {
+      // Keep the outer <a> and its navigation href. Drop the DM URL from title
+      // (it's been consumed) and replace the anchor's content with the picture.
+      a.removeAttribute('title');
+      a.replaceChildren(picture);
+      return;
+    }
+
+    // Unlinked: the whole anchor is just a carrier for the DM URL.
+    // If it's the markdown-generated <p> wrapper around a standalone
+    // image, unwrap so the picture becomes a top-level grid cell.
+    // NEVER unwrap <div> — those are block-content cells (cards,
+    // carousel, columns); unwrapping them collapses the block's row
+    // structure and decorators can't find their image cells.
+    if (isUnwrappableMarkdownParagraph(a)) {
+      a.parentElement.replaceWith(picture);
+    } else {
+      a.replaceWith(picture);
+    }
+  });
+}
+
+// Register the DM dispatcher for createOptimizedPicture interop.
+// The aem.js patch (applied per skills/excat-site-migration/SKILL.md
+// Step 5b) checks for this hook and delegates DM URLs to our renderer,
+// so block decorators that call createOptimizedPicture(img.src, ...) on
+// Scene7 IS/Image template URLs or DM Open API URLs preserve their
+// query parameters instead of having them stripped by the path-only
+// optimizer in aem.js. No-op when the auto-block is not installed
+// (hook unregistered → aem.js falls through to standard logic).
+//
+// Returning null for non-DM URLs lets the caller (createOptimizedPicture)
+// fall through to its standard path-only optimization. This is the
+// regression guard for non-DM images on the same page.
+window.__dmRender__ = (src, alt) => {
+  const family = detectDynamicMediaUrl(src);
+  if (!family) return null;
+  return family === 'scene7'
+    ? renderScene7Picture(src, alt)
+    : renderDmOpenApiPicture(src, alt);
+};
+
+// --- END DM/Scene7 auto-block ---
+
 /**
- * Moves all the attributes from a given elmenet to another given element.
- * @param {Element} from the element to copy attributes from
- * @param {Element} to the element to copy attributes to
- */
+   * Moves all the attributes from a given elmenet to another given element.
+   * @param {Element} from the element to copy attributes from
+   * @param {Element} to the element to copy attributes to
+   */
 export function moveAttributes(from, to, attributes) {
   if (!attributes) {
     // eslint-disable-next-line no-param-reassign
@@ -26,17 +272,30 @@ export function moveAttributes(from, to, attributes) {
   attributes.forEach((attr) => {
     const value = from.getAttribute(attr);
     if (value) {
-      to?.setAttribute(attr, value);
+      to.setAttribute(attr, value);
       from.removeAttribute(attr);
     }
   });
 }
 
+export function isAuthorEnvironment() {
+  if (window?.location?.origin?.includes('author')) {
+    return true;
+  }
+  return false;
+
+  /*
+    if(document.querySelector('*[data-aue-resource]') !== null){
+      return true;
+    } */
+  // return false;
+}
+
 /**
- * Move instrumentation attributes from a given element to another given element.
- * @param {Element} from the element to copy attributes from
- * @param {Element} to the element to copy attributes to
- */
+   * Move instrumentation attributes from a given element to another given element.
+   * @param {Element} from the element to copy attributes from
+   * @param {Element} to the element to copy attributes to
+   */
 export function moveInstrumentation(from, to) {
   moveAttributes(
     from,
@@ -48,8 +307,8 @@ export function moveInstrumentation(from, to) {
 }
 
 /**
- * load fonts.css and set a session storage flag
- */
+   * load fonts.css and set a session storage flag
+   */
 async function loadFonts() {
   await loadCSS(`${window.hlx.codeBasePath}/styles/fonts.css`);
   try {
@@ -59,71 +318,184 @@ async function loadFonts() {
   }
 }
 
-function autolinkModals(doc) {
-  doc.addEventListener('click', async (e) => {
-    const origin = e.target.closest('a');
-    if (origin && origin.href && origin.href.includes('/modals/')) {
-      e.preventDefault();
-      const { openModal } = await import(`${window.hlx.codeBasePath}/blocks/modal/modal.js`);
-      openModal(origin.href);
+/**
+   * Return the placeholder file specific to language
+   * @returns
+   */
+export async function fetchLanguagePlaceholders() {
+  const langCode = getLanguage();
+  try {
+    // Try fetching placeholders with the specified language
+    return await fetchPlaceholders(`${PATH_PREFIX}/${langCode}`);
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error(`Error fetching placeholders for lang: ${langCode}. Will try to get en placeholders`, error);
+    // Retry without specifying a language (using the default language)
+    try {
+      return await fetchPlaceholders(`${PATH_PREFIX}/en`);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Error fetching placeholders:', err);
     }
+  }
+  return {}; // default to empty object
+}
+
+// Document-link matcher for the download-list auto-block below.
+const DOC_LINK_RE = /\/content\/dam\/|\.(pdf|xlsx?|docx?|pptx?|zip|csv)(\?|#|$)/i;
+
+/**
+ * Auto-block: a paragraph that is nothing but a run of document-download links
+ * (e.g. the "A Legacy of Progress" report list) should render as the
+ * download-list-docs boxes, matching the source. Some such lists were authored
+ * as loose default content rather than inside a block, so we detect them here
+ * and wrap them into a download-list-docs block before decoration.
+ * @param {Element} main The container element
+ */
+function buildDownloadListBlocks(main) {
+  main.querySelectorAll(':scope p').forEach((p) => {
+    const anchors = [...p.querySelectorAll('a[href]')];
+    // Need at least two document links, and the paragraph must be only links
+    // (no stray prose) — its text should equal the concatenated link labels.
+    if (anchors.length < 2) return;
+    if (!anchors.every((a) => DOC_LINK_RE.test(a.getAttribute('href') || ''))) return;
+    const linkText = anchors.map((a) => a.textContent.trim()).join('').replace(/\s+/g, '');
+    if (p.textContent.trim().replace(/\s+/g, '') !== linkText) return;
+
+    // Build a download-list-docs block: one row, key-value cell "individualAssets"
+    // + a cell holding the links (each in its own <p>, matching parser output).
+    const linksCell = document.createElement('div');
+    anchors.forEach((a) => {
+      const wrap = document.createElement('p');
+      wrap.append(a);
+      linksCell.append(wrap);
+    });
+    const keyCell = document.createElement('div');
+    keyCell.textContent = 'individualAssets';
+    const block = buildBlock('download-list-docs', [[keyCell, linksCell]]);
+    p.replaceWith(block);
   });
 }
 
 /**
- * Builds all synthetic blocks in a container element.
- * @param {Element} main The container element
- */
-function buildAutoBlocks() {
+   * Builds all synthetic blocks in a container element.
+   * @param {Element} main The container element
+   */
+function buildAutoBlocks(main) {
   try {
-    // TODO: add auto block, if needed
+    buildDynamicMediaImages(main);
+    buildDownloadListBlocks(main);
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Auto Blocking failed', error);
   }
 }
 
-function a11yLinks(main) {
-  const links = main.querySelectorAll('a');
-  links.forEach((link) => {
-    let label = link.textContent;
-    if (!label && link.querySelector('span.icon')) {
-      const icon = link.querySelector('span.icon');
-      label = icon ? icon.classList[1]?.split('-')[1] : label;
+/* Pre-existing project Dynamic Media / image decoration below is kept as-is to
+   avoid regressions; its style-rule exceptions are scoped here rather than rewritten. */
+/* eslint-disable no-continue, no-use-before-define, no-restricted-syntax, no-await-in-loop, max-len, no-useless-escape, no-shadow */
+
+/**
+   * Builds all synthetic blocks in a container element.
+   * @param {Element} main The container element
+   */
+function decorateButtons(main) {
+  main.querySelectorAll('img').forEach((img) => {
+    let altT = decodeURIComponent(img.alt);
+
+    if (altT && altT.includes('https://delivery-')) {
+      try {
+        altT = JSON.parse(altT);
+        const { altText, deliveryUrl } = altT;
+        const url = new URL(deliveryUrl);
+        const imgName = url.pathname.substring(url.pathname.lastIndexOf('/') + 1);
+        const block = whatBlockIsThis(img);
+        const bp = getMetadata(block);
+        let breakpoints = [{ media: '(min-width: 600px)', width: '2000' }, { width: '750' }];
+        if (bp) {
+          const bps = bp.split('|');
+          const bpS = bps.map((b) => b.split(',').map((p) => p.trim()));
+          breakpoints = bpS.map((n) => {
+            const obj = {};
+            n.forEach((i) => {
+              const t = i.split(/:(.*)/s);
+              obj[t[0].trim()] = t[1].trim();
+            });
+            return obj;
+          });
+        } else {
+          const format = getMetadata(imgName.toLowerCase().replace('.', '-'));
+          const formats = format.split('|');
+          const formatObj = {};
+          formats.forEach((i) => {
+            const [a, b] = i.split('=');
+            formatObj[a] = b;
+          });
+          breakpoints = breakpoints.map((n) => (
+            { ...n, ...formatObj }
+          ));
+        }
+        const picture = createOptimizedPicture(deliveryUrl, altText, false, breakpoints);
+        img.parentElement.replaceWith(picture);
+      } catch (error) {
+        img.setAttribute('style', 'border:5px solid red');
+        img.setAttribute('data-asset-type', 'video');
+        img.setAttribute('title', 'Update block to render video.');
+      }
     }
-    link.setAttribute('aria-label', label);
   });
+  libDecorateButtons(main);
 }
 
 /**
- * Decorates the main element.
- * @param {Element} main The main element
- */
+   * Decorates the main element.
+   * @param {Element} main The main element
+   */
 // eslint-disable-next-line import/prefer-default-export
-export function decorateMain(main) {
+export async function decorateMain(main) {
   // hopefully forward compatible button decoration
   decorateButtons(main);
   decorateIcons(main);
   buildAutoBlocks(main);
   decorateSections(main);
   decorateBlocks(main);
-  // add aria-label to links
-  a11yLinks(main);
+  decorateDMImages(main);
+  // decorateDMVideos(main);
+}
+
+async function renderWBDataLayer() {
+  // const config = await fetchPlaceholders();
+  const lastPubDateStr = getMetadata('published-time');
+  const firstPubDateStr = getMetadata('content_date') || lastPubDateStr;
+  const hostnameFromPlaceholders = await getHostname();
+  window.wbgData.page = {
+    pageInfo: {
+      pageCategory: getMetadata('pagecategory'),
+      channel: getMetadata('channel'),
+      themecfreference: getMetadata('theme_cf_reference'),
+      contentType: getMetadata('content_type'),
+      pageUid: getMetadata('pageuid'),
+      pageName: getMetadata('pagename'),
+      hostName: hostnameFromPlaceholders || getMetadata('hostname'),
+      pageFirstPub: formatDate(firstPubDateStr),
+      pageLastMod: formatDate(lastPubDateStr),
+      webpackage: '',
+    },
+  };
 }
 
 /**
- * Loads everything needed to get to LCP.
- * @param {Element} doc The container element
- */
+   * Loads everything needed to get to LCP.
+   * @param {Element} doc The container element
+   */
 async function loadEager(doc) {
-  document.documentElement.lang = 'en';
+  setPageLanguage();
   decorateTemplateAndTheme();
-  if (getMetadata('breadcrumbs').toLowerCase() === 'true') {
-    doc.body.dataset.breadcrumbs = true;
-  }
+  await runExperimentation(doc, experimentationConfig);
+  renderWBDataLayer();
   const main = doc.querySelector('main');
   if (main) {
-    decorateMain(main);
+    await decorateMain(main);
     document.body.classList.add('appear');
     await loadSection(main.querySelector('.section'), waitForFirstImage);
   }
@@ -139,30 +511,554 @@ async function loadEager(doc) {
 }
 
 /**
- * Loads everything that doesn't need to be delayed.
- * @param {Element} doc The container element
- */
-async function loadLazy(doc) {
-  autolinkModals(doc);
+   * Create section background image
+   *
+   * @param {*} doc
+   */
+// function decorateSectionImages(doc) {
+//   const sectionImgContainers = doc.querySelectorAll('main .section[data-image]');
+//   sectionImgContainers.forEach((sectionImgContainer) => {
+//     const sectionImg = sectionImgContainer.dataset.image;
+//     const sectionTabImg = sectionImgContainer.dataset.tabImage;
+//     const sectionMobImg = sectionImgContainer.dataset.mobImage;
+//     let defaultImgUrl = null;
 
+//     const newPic = document.createElement('picture');
+//     if (sectionImg) {
+//       newPic.appendChild(createSource(sectionImg, 1920, '(min-width: 1024px)'));
+//       defaultImgUrl = sectionImg;
+//     }
+
+//     if (sectionTabImg) {
+//       newPic.appendChild(createSource(sectionTabImg, 1024, '(min-width: 768px)'));
+//       defaultImgUrl = sectionTabImg;
+//     }
+
+//     if (sectionMobImg) {
+//       newPic.appendChild(createSource(sectionTabImg, 600, '(max-width: 767px)'));
+//       defaultImgUrl = sectionMobImg;
+//     }
+
+//     const newImg = document.createElement('img');
+//     newImg.src = defaultImgUrl;
+//     newImg.alt = '';
+//     newImg.className = 'sec-img';
+//     newImg.loading = 'lazy';
+//     newImg.width = '768';
+//     newImg.height = '100%';
+
+//     if (defaultImgUrl) {
+//       newPic.appendChild(newImg);
+//       sectionImgContainer.prepend(newPic);
+//     }
+//   });
+// }
+
+/**
+   * Loads everything that doesn't need to be delayed.
+   * @param {Element} doc The container element
+   */
+async function loadLazy(doc) {
   const main = doc.querySelector('main');
   await loadSections(main);
-
+  // decorateSectionImages(doc);
   const { hash } = window.location;
   const element = hash ? doc.getElementById(hash.substring(1)) : false;
   if (hash && element) element.scrollIntoView();
-
+  // decorateSectionImages(doc);
   loadHeader(doc.querySelector('header'));
   loadFooter(doc.querySelector('footer'));
 
   loadCSS(`${window.hlx.codeBasePath}/styles/lazy-styles.css`);
   loadFonts();
+  await showExperimentationRail(doc, experimentationConfig);
+}
+
+export function isDMOpenAPIUrl(src) {
+  return /^(https?:\/\/(.*)\/adobe\/assets\/urn:aaid:aem:(.*))/gm.test(src);
+}
+
+export function getMetadataUrl(url) {
+  try {
+    // Pattern to match: /adobe/assets/urn:aaid:aem:[uuid]
+    // UUID format: 8-4-4-4-12 hexadecimal characters
+    const urnPattern = /(\/adobe\/assets\/urn:aaid:aem:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i;
+    const match = url.match(urnPattern);
+
+    if (!match) {
+      return null;
+    }
+
+    // Extract the base URL (protocol + hostname)
+    const urlObj = new URL(url);
+    const baseUrl = `${urlObj.protocol}//${urlObj.hostname}`;
+
+    // Construct the metadata URL
+    return `${baseUrl}${match[1]}/metadata`;
+  } catch (error) {
+    console.error('Error creating metadata URL:', error);
+    return null;
+  }
 }
 
 /**
- * Loads everything that happens a lot later,
- * without impacting the user experience.
- */
+   * Decorates Dynamic Media images by modifying their URLs to include specific parameters
+   * and creating a <picture> element with different sources for different image formats and sizes.
+   *
+   * @param {HTMLElement} main - The main container element that includes the links to be processed.
+   */
+export async function decorateDMImages(main) {
+  const links = Array.from(main.querySelectorAll('a[href]'));
+
+  for (const a of links) {
+    const { href } = a;
+    const hrefLower = href.toLowerCase();
+    if (!isDMOpenAPIUrl(href)) continue;
+
+    const isGifFile = hrefLower.endsWith('.gif');
+    const containsOriginal = href.includes('/original/');
+    const dmOpenApiDiv = a.closest('.dm-openapi') || a.closest('.dynamic-media-image');
+
+    if (!dmOpenApiDiv) continue;
+
+    // Skip non-originals except GIF, as per your logic
+    if (containsOriginal && !isGifFile) continue;
+
+    const blockBeingDecorated = whatBlockIsThis(a);
+    let blockName = '';
+    let rotate = '';
+    let flip = '';
+    let cropValue = '';
+    let preset = '';
+    let extend = '';
+    let backgroundcolor = '';
+    let advanceManualParam = '';
+    let enableSmartCrop = '';
+    let showInfoIcon = '';
+
+    if (blockBeingDecorated) {
+      blockName = Array.from(blockBeingDecorated.classList).find(
+        (className) => className !== 'block',
+      ) || '';
+    }
+
+    // Early exclude videos
+    const videoExtensions = ['.mp4', '.mov', '.webm', '.ogg', '.m4v', '.mkv'];
+    const isVideoAsset = videoExtensions.some((ext) => hrefLower.includes(ext));
+    if (isVideoAsset || blockName === 'video') continue;
+
+    // Extract advanced modifiers only for dynamic-media blocks
+    if (blockName === 'dm-openapi' || blockName === 'dynamic-media-image') {
+      const parentDiv = a.closest('div');
+      if (parentDiv && parentDiv.parentElement) {
+        const container = parentDiv.parentElement;
+        const siblings = [];
+        let current = container.nextElementSibling;
+
+        // Collect up to 4 siblings (preset, rotate, flip, crop) in order
+        while (current && siblings.length < 9) {
+          siblings.push(current);
+          current = current.nextElementSibling;
+        }
+
+        // Helper to safely consume a sibling element's trimmed text and remove it
+        const consumeSiblingText = (el) => {
+          if (!el) return '';
+          const text = el.textContent?.trim() || '';
+          if (text) el.remove();
+          return text;
+        };
+
+        // Order matters: preset, rotate, flip, crop
+        if (siblings.length > 0) {
+          enableSmartCrop = consumeSiblingText(siblings.shift()) || false;
+          preset = consumeSiblingText(siblings.shift());
+          extend = consumeSiblingText(siblings.shift());
+          backgroundcolor = consumeSiblingText(siblings.shift());
+          rotate = consumeSiblingText(siblings.shift());
+          flip = consumeSiblingText(siblings.shift());
+          cropValue = consumeSiblingText(siblings.shift());
+          advanceManualParam = consumeSiblingText(siblings.shift()); // advance_parameters
+          showInfoIcon = consumeSiblingText(siblings.shift());
+        }
+      }
+
+      // Remove direct child divs once (minimize DOM thrash)
+      const directChildDivs = dmOpenApiDiv.querySelectorAll(':scope > div');
+      directChildDivs.forEach((div) => div.remove());
+    }
+
+    // Build advanced modifier parameters for Dynamic Media URL
+    const buildAdvanceModifierParams = () => {
+      const params = [];
+
+      // Add rotation parameter
+      if (rotate) {
+        params.push(`rotate=${encodeURIComponent(rotate)}`);
+      }
+
+      // Add flip parameter
+      if (flip) {
+        params.push(`flip=${encodeURIComponent(flip.toLowerCase())}`);
+      }
+
+      // Add crop parameter
+      if (cropValue) {
+        params.push(`crop=${encodeURIComponent(cropValue.toLowerCase())}`);
+      }
+
+      // Handle preset parameter with special logic for 'border' preset
+      if (preset) {
+        const presetLower = preset.toLowerCase();
+
+        if (presetLower === 'border') {
+          // Border preset can include extend and background-color
+          if (extend && backgroundcolor) {
+            const bgColor = backgroundcolor.replace('#', '');
+            params.push(`extend=${encodeURIComponent(extend)}`);
+            params.push(`background-color=rgb,${encodeURIComponent(bgColor)}`);
+          } else if (extend) {
+            params.push(`extend=${encodeURIComponent(extend)}`);
+          }
+        } else if (presetLower === 'grayscale') {
+          params.push('saturation=-100');
+        } else {
+          // Regular preset
+          params.push(`preset=${encodeURIComponent(preset)}`);
+        }
+      }
+
+      // Append advance_parameters (author-provided custom params)
+      if (advanceManualParam) {
+        // Strip leading '&' to avoid double '&&' when joining
+        const sanitized = advanceManualParam.replace(/^&+/, '');
+        if (sanitized) {
+          params.push(sanitized);
+        }
+      }
+
+      // Join all parameters with '&' and prepend '&' if there are any
+      return params.length > 0 ? `&${params.join('&')}` : '';
+    };
+
+    const advanceModifierParams = buildAdvanceModifierParams();
+    const originalUrl = new URL(href);
+    const hasQueryParams = originalUrl.toString().includes('?');
+    const paramSeparator = hasQueryParams ? '&' : '?';
+    const baseParams = `${paramSeparator}quality=85&preferwebp=true${advanceModifierParams}`;
+    const pic = document.createElement('picture');
+
+    // Only add smart crop sources if enableSmartCrop is true
+    if (enableSmartCrop === true || enableSmartCrop === 'true') {
+      const metadataUrl = getMetadataUrl(href);
+      if (!metadataUrl) continue;
+
+      let metadata;
+      try {
+        const response = await fetch(metadataUrl);
+        if (!response.ok) {
+          console.error(`Failed to fetch metadata: ${response.status}`);
+          continue;
+        }
+        metadata = await response.json();
+      } catch (error) {
+        console.error('Error fetching or processing metadata:', error);
+        continue;
+      }
+
+      const smartcrops = metadata?.repositoryMetadata?.smartcrops;
+      const mimeType = metadata?.repositoryMetadata?.['dc:format'];
+      if (smartcrops) {
+        // Build picture and sources
+        pic.style.textAlign = 'center';
+
+        const cropKeys = Object.keys(smartcrops);
+        if (!cropKeys.length) continue;
+
+        // Sort crop keys by width desc (largest → smallest)
+        const cropOrder = cropKeys.sort((a, b) => {
+          const widthA = parseInt(smartcrops[a].width, 10) || 0;
+          const widthB = parseInt(smartcrops[b].width, 10) || 0;
+          return widthB - widthA;
+        });
+
+        const largestCropWidth = Math.max(
+          ...cropOrder.map((cropName) => parseInt(smartcrops[cropName].width, 10) || 0),
+        );
+
+        const extraLargeBreakpoint = Math.max(largestCropWidth + 1, 1300);
+
+        // Extra-large screen source (no smartcrop)
+        const sourceWebpExtraLarge = document.createElement('source');
+        sourceWebpExtraLarge.type = 'image/webp';
+        sourceWebpExtraLarge.srcset = `${originalUrl}${baseParams}`;
+        sourceWebpExtraLarge.media = `(min-width: ${extraLargeBreakpoint}px)`;
+        pic.appendChild(sourceWebpExtraLarge);
+
+        // Smartcrop sources
+        cropOrder.forEach((cropName) => {
+          const crop = smartcrops[cropName];
+          if (!crop) return;
+
+          const minWidth = parseInt(crop.width, 10) || 0;
+          const smartcropParam = `${paramSeparator}smartcrop=${encodeURIComponent(
+            cropName,
+          )}`;
+
+          const sourceWebp = document.createElement('source');
+          sourceWebp.type = mimeType || 'image/webp';
+          sourceWebp.srcset = `${originalUrl}${smartcropParam}&quality=85&preferwebp=true${advanceModifierParams}`;
+          if (minWidth > 0) {
+            sourceWebp.media = `(min-width: ${minWidth}px)`;
+          }
+
+          pic.appendChild(sourceWebp);
+        });
+      }
+    }
+
+    // Fallback
+    const fallbackUrl = `${originalUrl}${baseParams}`;
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.src = fallbackUrl;
+    // img.alt = href !== a.title ? a.title || '' : '';
+
+    pic.appendChild(img);
+    dmOpenApiDiv.appendChild(pic);
+
+    if (showInfoIcon === true || showInfoIcon === 'true') {
+      const urnPattern = /(\/adobe\/assets\/urn:[^\/]+)/i;
+      const urnMatch = href.match(urnPattern);
+      if (urnMatch) {
+        const urlObj = new URL(href);
+        const imageBaseUrl = `${urlObj.protocol}//${urlObj.hostname}${urnMatch[1]}`;
+        const snapshotState = JSON.stringify({
+          imageUrl: imageBaseUrl,
+          serviceMode: 'openapi',
+          params: {},
+          thumbWidth: 600,
+          thumbHeight: 600,
+        });
+        const snapshotUrl = `https://snapshot.scene7.com/?state=${encodeURIComponent(snapshotState)}`;
+
+        dmOpenApiDiv.style.position = 'relative';
+        dmOpenApiDiv.style.display = 'inline-block';
+
+        const infoLink = document.createElement('a');
+        infoLink.href = snapshotUrl;
+        infoLink.target = '_blank';
+        infoLink.rel = 'noopener noreferrer';
+        infoLink.className = 'dm-info-icon';
+        infoLink.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="8,5 19,12 8,19"/></svg>';
+        const tooltip = document.createElement('span');
+        tooltip.className = 'dm-info-tooltip';
+        tooltip.textContent = 'Explore more image transformations in Snapshot tool';
+        infoLink.appendChild(tooltip);
+
+        dmOpenApiDiv.appendChild(infoLink);
+      }
+    }
+  }
+
+  const allBlocks = Array.from(main.querySelectorAll('.dm-openapi, .dynamic-media-image'));
+
+  for (const block of allBlocks) {
+    const links = block.querySelectorAll('a[href]');
+    // If no image is authored, hide all children to prevent raw property values
+    // like "false", "na" from rendering as visible text
+    if (links.length === 0) {
+      const pictures = block.querySelectorAll('picture');
+      // Hide children only if no image was authored (no links)
+      // and block wasn't already processed (no picture element)
+      if (links.length === 0 && pictures.length === 0) {
+        Array.from(block.children).forEach((child) => {
+          child.style.display = 'none';
+        });
+      }
+    }
+  }
+}
+
+function whatBlockIsThis(element) {
+  let currentElement = element;
+
+  while (currentElement.parentElement) {
+    if (currentElement.parentElement.classList.contains('block')) return currentElement.parentElement;
+    currentElement = currentElement.parentElement;
+    if (currentElement.classList.length > 0) return currentElement.classList[0];
+  }
+  return null;
+}
+
+/**
+   * Decorates Dynamic Media video blocks by finding video asset links
+   * and rendering them appropriately (iframe for DM player URLs, video element for raw files).
+   *
+   * @param {HTMLElement} main - The main container element that includes the video blocks.
+   */
+/*
+  export async function decorateDMVideos(main) {
+  const videoBlocks = main.querySelectorAll('.dynamic-media-video');
+
+  for (const block of videoBlocks) {
+    const links = Array.from(block.querySelectorAll('a[href]'));
+
+    for (const a of links) {
+    const href = a.href;
+    const hrefLower = href.toLowerCase();
+
+    // Check if this is a DM OpenAPI URL
+    if (!isDMOpenAPIUrl(href)) continue;
+
+    // Check if this is a DM player URL (ends with /play)
+    const isDMPlayerUrl = href.includes('/play');
+
+    // Check if this is a video file
+    const videoExtensions = ['.mp4', '.mov', '.webm', '.ogg', '.m4v', '.mkv'];
+    const isVideoAsset = videoExtensions.some((ext) => hrefLower.includes(ext));
+
+    // Must be either a DM player URL or a video file
+    if (!isDMPlayerUrl && !isVideoAsset) continue;
+
+    // Extract video options from authored content
+    const parentDiv = a.closest('div');
+    const container = parentDiv?.parentElement;
+    const siblings = [];
+
+    if (container) {
+      let current = container.nextElementSibling;
+      // Collect siblings for video options (title, autoplay, loop, muted)
+      while (current && siblings.length < 4) {
+      siblings.push(current);
+      current = current.nextElementSibling;
+      }
+    }
+
+    // Helper to safely consume a sibling element's trimmed text and remove it
+    const consumeSiblingText = (el) => {
+      if (!el) return '';
+      const text = el.textContent?.trim() || '';
+      if (text) el.remove();
+      return text;
+    };
+
+    // Extract video options: title, autoplay, loop, muted
+    const videoTitle = consumeSiblingText(siblings.shift()) || 'Dynamic Media Video';
+    const autoplay = consumeSiblingText(siblings.shift())?.toLowerCase() === 'true';
+    const loop = consumeSiblingText(siblings.shift())?.toLowerCase() === 'true';
+    const muted = consumeSiblingText(siblings.shift())?.toLowerCase() === 'true';
+
+    // Clear block content
+    const directChildDivs = block.querySelectorAll(':scope > div');
+    directChildDivs.forEach((div) => div.remove());
+
+    if (isDMPlayerUrl) {
+      // DM OpenAPI player URL - embed as iframe
+      // URL format: https://delivery-{id}.adobeaemcloud.com/adobe/assets/urn:aaid:aem:{uuid}/play
+      let playerUrl = href;
+
+      // Add query parameters for player options
+      const params = new URLSearchParams();
+      if (autoplay) params.set('autoplay', '1');
+      if (loop) params.set('loop', '1');
+      if (muted || autoplay) params.set('muted', '1'); // Mute if autoplay for browser policy
+
+      const paramString = params.toString();
+      if (paramString) {
+      playerUrl += (playerUrl.includes('?') ? '&' : '?') + paramString;
+      }
+
+      // Create responsive iframe wrapper
+      const iframeWrapper = document.createElement('div');
+      iframeWrapper.className = 'dm-video-player-wrapper';
+      iframeWrapper.style.cssText = 'position: relative; width: 100%; padding-bottom: 56.25%; height: 0; overflow: hidden;';
+
+      const iframe = document.createElement('iframe');
+      iframe.src = playerUrl;
+      iframe.title = videoTitle;
+      iframe.setAttribute('frameborder', '0');
+      iframe.setAttribute('allowfullscreen', '');
+      iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture; encrypted-media');
+      iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;';
+
+      iframeWrapper.appendChild(iframe);
+      block.appendChild(iframeWrapper);
+      block.dataset.videoLoaded = 'true';
+
+      iframe.addEventListener('load', () => {
+      block.dataset.videoLoaded = 'true';
+      });
+
+      iframe.addEventListener('error', () => {
+      console.error('Error loading DM video player:', playerUrl);
+      block.dataset.videoLoaded = 'error';
+      });
+    } else {
+      // Raw video file - use HTML5 video element
+      const videoUrl = href.split('?')[0];
+
+      const video = document.createElement('video');
+      video.setAttribute('preload', 'metadata');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('controls', '');
+      video.setAttribute('title', videoTitle);
+
+      if (autoplay) {
+      video.setAttribute('autoplay', '');
+      video.setAttribute('muted', '');
+      }
+      if (loop) video.setAttribute('loop', '');
+      if (muted) video.setAttribute('muted', '');
+
+      const sourceEl = document.createElement('source');
+      sourceEl.setAttribute('src', videoUrl);
+
+      const ext = videoUrl.split('.').pop()?.toLowerCase() || 'mp4';
+      const mimeTypes = {
+      mp4: 'video/mp4',
+      webm: 'video/webm',
+      ogg: 'video/ogg',
+      mov: 'video/quicktime',
+      m4v: 'video/mp4',
+      mkv: 'video/x-matroska',
+      };
+      sourceEl.setAttribute('type', mimeTypes[ext] || 'video/mp4');
+
+      video.appendChild(sourceEl);
+      block.appendChild(video);
+      block.dataset.videoLoaded = 'false';
+
+      video.addEventListener('loadedmetadata', () => {
+      block.dataset.videoLoaded = 'true';
+      });
+
+      video.addEventListener('error', () => {
+      console.error('Error loading DM video:', videoUrl);
+      block.dataset.videoLoaded = 'error';
+      });
+    }
+    }
+  }
+  } */
+
+/**
+   * remove the adujusts the auto s
+   * @param {Element} main The container element
+   */
+// eslint-disable-next-line no-unused-vars
+function adjustAutoImages(main) {
+  const pictureElement = main.querySelector('div > p > picture');
+  if (pictureElement) {
+    const pElement = pictureElement.parentElement;
+    pElement.className = 'auto-image-container';
+  }
+}
+
+/**
+   * Loads everything that happens a lot later,
+   * without impacting the user experience.
+   */
 function loadDelayed() {
   // eslint-disable-next-line import/no-cycle
   window.setTimeout(() => import('./delayed.js'), 3000);
@@ -170,6 +1066,7 @@ function loadDelayed() {
 }
 
 async function loadPage() {
+  window.wbgData ||= {};
   await loadEager(document);
   await loadLazy(document);
   loadDelayed();
